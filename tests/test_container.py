@@ -39,6 +39,89 @@ def test_resolves_functions():
     assert isinstance(container.resolve(fun), SimpleClass)
 
 
+def test_can_be_forked():
+    base = py_ioc.Container()
+    fork = base.fork()
+
+    assert isinstance(fork.make(SimpleClass), SimpleClass)
+
+
+def test_forked_containers_delegate_to_its_parent():
+    base = py_ioc.Container()
+    fork = base.fork()
+
+    base.bind('token').to_instance(1)
+
+    assert fork.make('token') == 1
+
+
+def test_base_containers_do_not_delegate_to_its_children():
+    base = py_ioc.Container()
+    fork = base.fork()
+
+    base.bind('token').to_instance(1)
+    fork.bind('token').to_instance(2)
+
+    assert base.make('token') == 1
+    assert fork.make('token') == 2
+
+
+def test_forks_can_be_nested():
+    base = py_ioc.Container()
+    middle = base.fork()
+    child = middle.fork()
+
+    base.bind('token').to_instance(1)
+    middle.bind('other').to_instance(2)
+    child.bind('token').to_instance(3)
+
+    assert base.make('token') == 1
+    assert middle.make('token') == 1
+    assert middle.make('other') == 2
+    assert child.make('token') == 3
+    assert child.make('other') == 2
+
+
+def test_kwargs_are_forwarded():
+    container = py_ioc.Container()
+
+    def fun_with_kwarg(kwarg=None):
+        return kwarg
+
+    assert container.make(ClassWithKwarg, kwarg=123).kwarg == 123
+    assert container.resolve(fun_with_kwarg, kwarg=123) == 123
+
+
+def test_classes_can_be_curried():
+    container = py_ioc.Container()
+    curried = container.curry(ClassWithDependency)
+
+    assert isinstance(curried().simple, SimpleClass)
+
+
+def test_functions_can_be_curried():
+    container = py_ioc.Container()
+
+    def fun(dep: SimpleClass):
+        return dep
+
+    curried = container.curry(fun)
+
+    assert isinstance(curried(), SimpleClass)
+
+
+def test_curried_functions_can_take_arguments_which_take_precedence():
+    container = py_ioc.Container()
+
+    def fun(arg: str, dep: SimpleClass):
+        assert isinstance(dep, SimpleClass)
+        return arg
+
+    curried = container.curry(fun)
+
+    assert curried('hello') == 'hello'
+
+
 class SimpleClass:
     pass
 
@@ -51,3 +134,8 @@ class ClassWithDependency:
 class ClassWithAbstractDependency:
     def __init__(self, abstract: 'Abstract'):
         self.abstract = abstract
+
+
+class ClassWithKwarg:
+    def __init__(self, kwarg=None):
+        self.kwarg = kwarg
